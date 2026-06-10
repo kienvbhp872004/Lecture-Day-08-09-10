@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<title>ETL Pipeline Flow</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0d1117;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: #e2e8f0;
+  padding: 40px 24px 60px;
+}
+
+/* ─── title ─── */
+.page-title {
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #f0f6fc;
+  margin-bottom: 4px;
+}
+.page-sub {
+  text-align: center;
+  font-size: 0.78rem;
+  color: #6e7681;
+  margin-bottom: 48px;
+}
+
+/* ─── canvas wrapper ─── */
+.canvas {
+  max-width: 860px;
+  margin: 0 auto;
+  position: relative;
+}
+
+/* ─── section label ─── */
+.stage-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  margin-bottom: 0;
+  position: relative;
+}
+
+/* stage badge on left */
+.stage-tag {
+  width: 80px;
+  min-width: 80px;
+  padding-top: 14px;
+  text-align: right;
+  padding-right: 14px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #484f58;
+  line-height: 1.3;
+}
+
+/* ─── node grid (2 cols + center divider) ─── */
+.node-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 40px 1fr;
+  align-items: start;
+}
+
+/* ─── individual node ─── */
+.node {
+  border-radius: 10px;
+  padding: 13px 15px;
+  border: 1.5px solid;
+  position: relative;
+}
+.node-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+.node-body {
+  font-size: 0.73rem;
+  line-height: 1.6;
+  color: #8b949e;
+}
+.node-body code {
+  font-family: 'Cascadia Code','Fira Code',monospace;
+  font-size: 0.7rem;
+  background: rgba(255,255,255,0.06);
+  padding: 0px 5px;
+  border-radius: 3px;
+  color: #cdd9e5;
+}
+
+/* colours */
+.node.grey   { background:#161b22; border-color:#30363d; }
+.node.grey .node-title { color:#cdd9e5; }
+
+.node.green  { background:#0d2119; border-color:#238636; }
+.node.green .node-title { color:#3fb950; }
+
+.node.red    { background:#1f0d0d; border-color:#8b2020; }
+.node.red .node-title { color:#f85149; }
+
+.node.yellow { background:#1f1700; border-color:#9e6a03; }
+.node.yellow .node-title { color:#e3b341; }
+
+.node.purple { background:#13001f; border-color:#6e40c9; }
+.node.purple .node-title { color:#bc8cff; }
+
+/* result nodes (big) */
+.node.result-bad  { background:#1f0d0d; border-color:#da3633; }
+.node.result-bad .node-title { color:#f85149; font-size:0.95rem; }
+.node.result-ok   { background:#082318; border-color:#2ea043; }
+.node.result-ok .node-title { color:#3fb950; font-size:0.95rem; }
+
+/* ─── badge ─── */
+.badge {
+  display:inline-block; font-size:0.6rem; font-weight:700;
+  letter-spacing:0.05em; padding:1px 6px; border-radius:20px;
+  margin-left:5px; vertical-align:middle;
+}
+.badge.ok   { background:#0d4429; color:#3fb950; }
+.badge.fail { background:#4a0a0a; color:#f85149; }
+.badge.skip { background:#2d1159; color:#bc8cff; }
+.badge.warn { background:#3d2b00; color:#e3b341; }
+
+/* ─── connector column (center) ─── */
+.conn {
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  font-size:0.65rem; color:#6e7681;
+  padding-top: 14px;
+}
+
+/* ─── vertical spacer with arrow ─── */
+.arrow-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+.arrow-row .stage-tag { } /* filler */
+.arrow-row .node-grid {
+  display: grid;
+  grid-template-columns: 1fr 40px 1fr;
+}
+.arrow-cell {
+  display:flex; align-items:center; justify-content:center;
+  height: 34px;
+}
+.arrow-cell svg { display:block; }
+
+/* ─── split label ─── */
+.split-label {
+  font-size:0.65rem; color:#6e7681;
+  text-align:center; line-height:1.4;
+  padding: 3px 4px;
+}
+
+/* ─── column headers ─── */
+.headers {
+  display: flex;
+  max-width: 860px;
+  margin: 0 auto 18px;
+  padding-left: 80px;
+}
+.hdr {
+  flex: 1;
+  text-align: center;
+  padding: 8px 12px;
+  border-radius: 7px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+.hdr-gap { width:40px; min-width:40px; }
+.hdr.dirty { background:#2d1010; color:#f85149; border:1px solid #8b2020; }
+.hdr.clean { background:#0a2015; color:#3fb950; border:1px solid #238636; }
+
+/* ─── divider line across full width ─── */
+.divider-line {
+  max-width:860px; margin:16px auto;
+  border:none; border-top:1px dashed #21262d;
+}
+
+/* row for wide shared node */
+.shared-row {
+  display:flex; align-items:flex-start; gap:0; margin-bottom:0;
+  max-width:860px; margin-left:auto; margin-right:auto;
+}
+.shared-node-wrap {
+  flex:1;
+  padding-left: 0;
+}
+.shared-node {
+  border-radius:10px; padding:13px 16px;
+  border:1.5px solid #30363d; background:#161b22;
+  display:flex; gap:24px; align-items:flex-start;
+}
+.shared-node .col { flex:1; }
+.shared-node .col-title {
+  font-size:0.7rem; font-weight:600; color:#484f58;
+  text-transform:uppercase; letter-spacing:0.08em; margin-bottom:5px;
+}
+
+/* full-width arrow */
+.fw-arrow {
+  max-width:860px; margin:0 auto;
+  display:flex; padding-left:80px;
+}
+.fw-arrow-inner {
+  flex:1; display:flex; align-items:center; justify-content:center;
+  height:32px;
+}
+</style>
+</head>
+<body>
+
+<div class="page-title">ETL Pipeline — Luồng xử lý dữ liệu</div>
+<div class="page-sub">Lab Day 10 · So sánh Clean Run vs Dirty Run (inject-bad)</div>
+
+<!-- ── column headers ── -->
+<div class="headers">
+  <div class="hdr dirty">⚠ Dirty Run · inject-bad</div>
+  <div class="hdr-gap"></div>
+  <div class="hdr clean">✓ Clean Run · 2026-06-10T07-00Z</div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     STEP 1 — INGEST (shared)
+══════════════════════════════════════════════ -->
+<div class="stage-row">
+  <div class="stage-tag">① Ingest</div>
+  <div class="node-grid">
+
+    <div class="node grey">
+      <div class="node-title">📄 policy_export_dirty.csv</div>
+      <div class="node-body">
+        <code>raw_records = 247</code><br/>
+        5 nguồn · duplicate · ngày sai · version conflict
+      </div>
+    </div>
+
+    <div class="conn">
+      <span style="font-size:1rem;color:#30363d">⟵</span>
+      <span>chung</span>
+      <span style="font-size:1rem;color:#30363d">⟶</span>
+    </div>
+
+    <div class="node grey">
+      <div class="node-title">📄 policy_export_dirty.csv</div>
+      <div class="node-body">
+        <code>raw_records = 247</code><br/>
+        Cùng file nguồn — 2 run dùng chung
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- arrow -->
+<div class="arrow-row">
+  <div class="stage-tag"></div>
+  <div class="node-grid">
+    <div class="arrow-cell">
+      <svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="20" stroke="#30363d" stroke-width="1.5"/><polygon points="1,28 -4,16 6,16" fill="#30363d"/></svg>
+    </div>
+    <div></div>
+    <div class="arrow-cell">
+      <svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="20" stroke="#30363d" stroke-width="1.5"/><polygon points="1,28 -4,16 6,16" fill="#30363d"/></svg>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     STEP 2 — TRANSFORM
+══════════════════════════════════════════════ -->
+<div class="stage-row">
+  <div class="stage-tag">② Transform</div>
+  <div class="node-grid">
+
+    <div class="node red">
+      <div class="node-title">cleaning_rules.py <span class="badge fail">--no-refund-fix</span></div>
+      <div class="node-body">
+        ✓ Rules 1–10 chạy bình thường<br/>
+        ✗ <strong style="color:#f85149">Rule fix "14 ngày → 7 ngày" BỊ TẮT</strong><br/><br/>
+        → Chunk <code>"14 ngày làm việc"</code> lọt vào cleaned
+      </div>
+    </div>
+
+    <div></div>
+
+    <div class="node green">
+      <div class="node-title">cleaning_rules.py <span class="badge ok">rules đầy đủ</span></div>
+      <div class="node-body">
+        ✓ Rules 1–11 chạy đầy đủ<br/>
+        ✓ <strong style="color:#3fb950">Rule 6: "14 ngày" → "7 ngày"</strong><br/>
+        ✓ Rule 11: enrich prefix escalation P1
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- arrow -->
+<div class="arrow-row">
+  <div class="stage-tag"></div>
+  <div class="node-grid">
+    <div class="arrow-cell"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="20" stroke="#8b2020" stroke-width="1.5"/><polygon points="1,28 -4,16 6,16" fill="#8b2020"/></svg></div>
+    <div></div>
+    <div class="arrow-cell"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="20" stroke="#238636" stroke-width="1.5"/><polygon points="1,28 -4,16 6,16" fill="#238636"/></svg></div>
+  </div>
+</div>
+
+<!-- output -->
+<div class="stage-row">
+  <div class="stage-tag"></div>
+  <div class="node-grid">
+
+    <div class="node red">
+      <div class="node-title">Output: 34 cleaned · 213 quarantine</div>
+      <div class="node-body">
+        <code>quarantine_reason</code>: not_in_allowlist, stale_date,<br/>
+        duplicate, unclear_prefix, garbled, P2 content…<br/>
+        <span style="color:#f85149">⚠ cleaned có chunk "14 ngày"</span>
+      </div>
+    </div>
+
+    <div></div>
+
+    <div class="node green">
+      <div class="node-title">Output: 34 cleaned · 213 quarantine</div>
+      <div class="node-body">
+        Cùng quarantine rules → cùng count<br/>
+        Khác biệt: <strong>nội dung</strong> cleaned, không phải số lượng<br/>
+        <span style="color:#3fb950">✓ cleaned chỉ có chunk "7 ngày"</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- arrow -->
+<div class="arrow-row">
+  <div class="stage-tag"></div>
+  <div class="node-grid">
+    <div class="arrow-cell"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="20" stroke="#8b2020" stroke-width="1.5"/><polygon points="1,28 -4,16 6,16" fill="#8b2020"/></svg></div>
+    <div></div>
+    <div class="arrow-cell"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="20" stroke="#238636" stroke-width="1.5"/><polygon points="1,28 -4,16 6,16" fill="#238636"/></svg></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     STEP 3 — VALIDATE
+══════════════════════════════════════════════ -->
+<div class="stage-row">
+  <div class="stage-tag">③ Validate</div>
+  <div class="node-grid">
+
+    <div class="node red">
+      <div class="node-title">expectations.py → E3 FAIL <span class="badge fail">HALT</span></div>
+      <div class="node-body">
+        E1 min_one_row <span class="badge ok">OK</span>
+        E2 no_empty_doc_id <span class="badge ok">OK</span><br/>
+        <strong style="color:#f85149">E3 refund_no_stale_14d</strong> <span class="badge fail">FAIL</span> violations=1<br/>
+        E4–E8 <span class="badge ok">OK</span><br/><br/>
+        <code>halt = True</code> → pipeline phải dừng
+      </div>
+    </div>
+
+    <div></div>
+
+    <div class="node green">
+      <div class="node-title">expectations.py → 8/8 PASS <span class="badge ok">OK</span></div>
+      <div class="node-body">
+        E1 <span class="badge ok">OK</span>
+        E2 <span class="badge ok">OK</span>
+        E3 <span class="badge ok">OK</span> violations=0<br/>
+        E4 <span class="badge ok">OK</span>
+        E5 <span class="badge ok">OK</span>
+        E6 <span class="badge ok">OK</span><br/>
+        E7 <span class="badge ok">OK</span>
+        E8 <span class="badge ok">OK</span><br/><br/>
+        <code>halt = False</code> → tiếp tục embed
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- DIVERGE arrows -->
+<div class="arrow-row">
+  <div class="stage-tag"></div>
+  <div class="node-grid">
+    <div class="arrow-cell"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="20" stroke="#9e6a03" stroke-width="1.5" stroke-dasharray="4,2"/><polygon points="1,28 -4,16 6,16" fill="#9e6a03"/></svg></div>
+    <div class="arrow-cell" style="flex-direction:column;gap:2px">
+      <div style="font-size:0.6rem;color:#484f58;text-align:center;line-height:1.3">↙ bypass<br/>↘ pass</div>
+    </div>
+    <div class="arrow-cell"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="20" stroke="#238636" stroke-width="1.5"/><polygon points="1,28 -4,16 6,16" fill="#238636"/></svg></div>
+  </div>
+</div>
+
+<!-- bypass node -->
+<div class="stage-row">
+  <div class="stage-tag"></div>
+  <div class="node-grid">
+
+    <div class="node yellow">
+      <div class="node-title">⚠ --skip-validate bypass <span class="badge skip">BYPASSED</span></div>
+      <div class="node-body">
+        <code>"WARN: expectation failed but --skip-validate<br/>→ tiếp tục embed (chỉ dùng demo Sprint 3)"</code><br/><br/>
+        Pipeline <strong style="color:#e3b341">không dừng</strong> dù E3 fail<br/>
+        Chunk bẩn sẽ được embed ở bước tiếp theo
+      </div>
+    </div>
+
+    <div></div>
+
+    <div class="node green" style="opacity:0.35; pointer-events:none;">
+      <div class="node-title">→ tiếp tục trực tiếp</div>
+      <div class="node-body">Không qua bypass — pipeline sạch không cần</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- arrow -->
+<div class="arrow-row">
+  <div class="stage-tag"></div>
+  <div class="node-grid">
+    <div class="arrow-cell"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="20" stroke="#9e6a03" stroke-width="1.5"/><polygon points="1,28 -4,16 6,16" fill="#9e6a03"/></svg></div>
+    <div></div>
+    <div class="arrow-cell"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="20" stroke="#238636" stroke-width="1.5"/><polygon points="1,28 -4,16 6,16" fill="#238636"/></svg></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     STEP 4 — EMBED
+══════════════════════════════════════════════ -->
+<div class="stage-row">
+  <div class="stage-tag">④ Embed</div>
+  <div class="node-grid">
+
+    <div class="node red">
+      <div class="node-title">ChromaDB upsert — chunk bẩn vào store</div>
+      <div class="node-body">
+        <code>embed_upsert count = 34</code><br/>
+        <code>embed_prune_removed = 1</code><br/>
+        <code>collection = day10_kb</code><br/><br/>
+        <span style="color:#f85149">⚠ Chunk "14 ngày làm việc" đã nằm trong vector store</span>
+      </div>
+    </div>
+
+    <div></div>
+
+    <div class="node green">
+      <div class="node-title">ChromaDB upsert — store sạch</div>
+      <div class="node-body">
+        <code>embed_upsert count = 34</code><br/>
+        <code>embed_prune_removed = 1</code><br/>
+        <code>collection = day10_kb</code><br/><br/>
+        <span style="color:#3fb950">✓ Chỉ có chunk "7 ngày làm việc"</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- arrow -->
+<div class="arrow-row">
+  <div class="stage-tag"></div>
+  <div class="node-grid">
+    <div class="arrow-cell"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="20" stroke="#8b2020" stroke-width="1.5"/><polygon points="1,28 -4,16 6,16" fill="#8b2020"/></svg></div>
+    <div></div>
+    <div class="arrow-cell"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="20" stroke="#238636" stroke-width="1.5"/><polygon points="1,28 -4,16 6,16" fill="#238636"/></svg></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     STEP 5 — MANIFEST + FRESHNESS
+══════════════════════════════════════════════ -->
+<div class="stage-row">
+  <div class="stage-tag">⑤ Monitor</div>
+  <div class="node-grid">
+
+    <div class="node red">
+      <div class="node-title">manifest_inject-bad.json</div>
+      <div class="node-body">
+        <code>no_refund_fix: true</code><br/>
+        <code>skipped_validate: true</code><br/>
+        <code>latest_exported_at: 2026-04-11</code><br/><br/>
+        freshness <span class="badge fail">FAIL</span> age=1447h &gt;&gt; SLA 24h
+      </div>
+    </div>
+
+    <div></div>
+
+    <div class="node green">
+      <div class="node-title">manifest_2026-06-10T07-00Z.json</div>
+      <div class="node-body">
+        <code>no_refund_fix: false</code><br/>
+        <code>skipped_validate: false</code><br/>
+        <code>latest_exported_at: 2026-04-11</code><br/><br/>
+        freshness <span class="badge fail">FAIL</span> age=1447h &gt;&gt; SLA 24h<br/>
+        <span style="color:#484f58">(cùng source file → cùng exported_at)</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- arrow -->
+<div class="arrow-row">
+  <div class="stage-tag"></div>
+  <div class="node-grid">
+    <div class="arrow-cell"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="20" stroke="#8b2020" stroke-width="1.5"/><polygon points="1,28 -4,16 6,16" fill="#8b2020"/></svg></div>
+    <div></div>
+    <div class="arrow-cell"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="20" stroke="#238636" stroke-width="1.5"/><polygon points="1,28 -4,16 6,16" fill="#238636"/></svg></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     STEP 6 — RETRIEVAL RESULT
+══════════════════════════════════════════════ -->
+<div class="stage-row">
+  <div class="stage-tag">⑥ Eval</div>
+  <div class="node-grid">
+
+    <div class="node result-bad">
+      <div class="node-title">❌ Retrieval bị nhiễm</div>
+      <div class="node-body" style="color:#cdd9e5">
+        <strong>q_refund_window:</strong><br/>
+        <code style="color:#f85149">hits_forbidden = YES</code><br/>
+        top1: <em>"...14 ngày làm việc..."</em><br/><br/>
+        Tổng: <strong style="color:#f85149">1/21 câu bị nhiễm</strong><br/>
+        Grading: <strong style="color:#f85149">chunk bẩn rank #1</strong>
+      </div>
+    </div>
+
+    <div></div>
+
+    <div class="node result-ok">
+      <div class="node-title">✅ Retrieval chính xác</div>
+      <div class="node-body" style="color:#cdd9e5">
+        <strong>q_refund_window:</strong><br/>
+        <code style="color:#3fb950">hits_forbidden = NO</code><br/>
+        top1: <em>"...7 ngày làm việc..."</em><br/><br/>
+        Tổng: <strong style="color:#3fb950">0/21 bị nhiễm</strong><br/>
+        Grading: <strong style="color:#3fb950">10/10 PASS</strong>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── legend ── -->
+<div style="max-width:860px;margin:36px auto 0;padding-left:80px;display:flex;gap:20px;flex-wrap:wrap;align-items:center;">
+  <span style="font-size:0.7rem;color:#484f58;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;">Legend</span>
+  <span style="font-size:0.72rem;display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#0d2119;border:1.5px solid #238636;"></span><span style="color:#8b949e">Clean / Pass</span></span>
+  <span style="font-size:0.72rem;display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#1f0d0d;border:1.5px solid #8b2020;"></span><span style="color:#8b949e">Error / Dirty</span></span>
+  <span style="font-size:0.72rem;display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#1f1700;border:1.5px solid #9e6a03;"></span><span style="color:#8b949e">Warning / Bypass</span></span>
+  <span style="font-size:0.72rem;display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#161b22;border:1.5px solid #30363d;"></span><span style="color:#8b949e">Shared (giống nhau)</span></span>
+</div>
+
+</body>
+</html>

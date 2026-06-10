@@ -112,5 +112,37 @@ def run_expectations(cleaned_rows: List[Dict[str, Any]]) -> Tuple[List[Expectati
         )
     )
 
+    # E7: Không có chunk nào còn sót prefix "Nội dung không rõ ràng:" sau khi clean
+    bad_unclear = [
+        r for r in cleaned_rows
+        if "nội dung không rõ ràng" in (r.get("chunk_text") or "").lower()
+    ]
+    ok7 = len(bad_unclear) == 0
+    results.append(
+        ExpectationResult(
+            "no_unclear_content_prefix",
+            ok7,
+            "halt",
+            f"violations={len(bad_unclear)}",
+        )
+    )
+
+    # E8: Tất cả 5 doc source hợp lệ phải có ít nhất 1 chunk trong cleaned
+    expected_docs = {
+        "policy_refund_v4", "sla_p1_2026", "it_helpdesk_faq",
+        "hr_leave_policy", "access_control_sop",
+    }
+    present_docs = {r.get("doc_id") for r in cleaned_rows}
+    missing_docs = sorted(expected_docs - present_docs)
+    ok8 = len(missing_docs) == 0
+    results.append(
+        ExpectationResult(
+            "all_doc_sources_present",
+            ok8,
+            "warn",
+            f"missing_sources={missing_docs}",
+        )
+    )
+
     halt = any(not r.passed and r.severity == "halt" for r in results)
     return results, halt

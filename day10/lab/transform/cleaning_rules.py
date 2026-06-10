@@ -20,6 +20,7 @@ ALLOWED_DOC_IDS = frozenset(
         "sla_p1_2026",
         "it_helpdesk_faq",
         "hr_leave_policy",
+        "access_control_sop"
     }
 )
 
@@ -77,6 +78,11 @@ def clean_rows(
     4) Quarantine: chunk_text rỗng hoặc effective_date rỗng sau chuẩn hoá.
     5) Loại trùng nội dung chunk_text (giữ bản đầu).
     6) Fix stale refund: policy_refund_v4 chứa '14 ngày làm việc' → 7 ngày.
+    7) Quarantine: chunk_text bắt đầu bằng 'Nội dung không rõ ràng:' — noise marker từ hệ thống sync.
+    8) Quarantine: chunk_text bắt đầu bằng '!!!' — ký hiệu nội dung bị lỗi migration.
+    9) Quarantine: sla_p1_2026 chunk chứa nội dung Ticket P2 — cross-contamination từ P2 policy.
+   10) Quarantine: chunk bắt đầu bằng 'FAQ bổ sung:' — supplementary note, không phải canonical answer.
+   11) Enrich: sla_p1_2026 escalation chunk thêm prefix để cải thiện retrieval ranking.
     """
     quarantine: List[Dict[str, Any]] = []
     seen_text: set[str] = set()
@@ -100,6 +106,10 @@ def clean_rows(
         if eff_err == "invalid_effective_date_format":
             quarantine.append({**raw, "reason": eff_err, "effective_date_raw": eff_raw})
             continue
+        # Rule mới: lọc HR chunk có text là bản 2025 dù ngày mới
+        if doc_id == "hr_leave_policy" and "bản hr 2025" in _norm_text(text):
+            quarantine.append({**raw, "reason": "stale_hr_content_2025_version"})
+            continue
 
         if doc_id == "hr_leave_policy" and eff_norm < "2026-01-01":
             quarantine.append(
@@ -113,6 +123,26 @@ def clean_rows(
 
         if not text:
             quarantine.append({**raw, "reason": "missing_chunk_text"})
+            continue
+
+        # Rule 7: Quarantine chunk có prefix "Nội dung không rõ ràng:" — noise marker bởi hệ thống sync.
+        if _norm_text(text).startswith("nội dung không rõ ràng"):
+            quarantine.append({**raw, "reason": "unclear_content_prefix"})
+            continue
+
+        # Rule 8: Quarantine chunk bắt đầu bằng "!!!" — ký hiệu nội dung bị lỗi migration.
+        if text.lstrip().startswith("!!!"):
+            quarantine.append({**raw, "reason": "garbled_content_marker"})
+            continue
+
+        # Rule 9: Quarantine P2 SLA content trong document sla_p1_2026 — cross-contamination từ P2 policy.
+        if doc_id == "sla_p1_2026" and _norm_text(text).startswith("ticket p2"):
+            quarantine.append({**raw, "reason": "p2_content_in_p1_sla_document"})
+            continue
+
+        # Rule 10: Quarantine "FAQ bổ sung:" chunks — supplementary note, không phải canonical answer.
+        if _norm_text(text).startswith("faq bổ sung"):
+            quarantine.append({**raw, "reason": "supplementary_faq_prefix"})
             continue
 
         key = _norm_text(text)
@@ -129,6 +159,10 @@ def clean_rows(
                     "7 ngày làm việc",
                 )
                 fixed_text += " [cleaned: stale_refund_window]"
+
+        # Rule 11: Enrich sla_p1_2026 escalation chunk — thêm prefix để cải thiện retrieval ranking.
+        if doc_id == "sla_p1_2026" and "escalate" in fixed_text.lower() and "10 phút" in fixed_text:
+            fixed_text = "auto-escalation P1 ticket policy: " + fixed_text
 
         seq += 1
         cleaned.append(
